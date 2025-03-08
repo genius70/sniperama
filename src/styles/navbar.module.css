@@ -1,0 +1,86 @@
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px;
+  background: linear-gradient(to right, purple, pink, orange);
+}
+
+.navItem {
+  color: white;
+  font-weight: bold;
+  text-decoration: none;
+  padding: 8px 12px;
+  border-radius: 5px;
+}
+
+.navItem:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+/* Navbar Container */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 32px;
+  background: #111;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* SNIPERAMA Logo with Gradient & 3D Hover Effect */
+.logo {
+  font-size: 2rem;
+  font-weight: bold;
+  background: linear-gradient(90deg, #6a0dad, #ff1493, #b8860b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-transform: uppercase;
+  transition: transform 0.3s ease, text-shadow 0.3s ease;
+}
+
+.logo:hover {
+  transform: scale(1.1);
+  text-shadow: 0px 4px 10px rgba(255, 20, 147, 0.7);
+}
+
+/* Navigation Links */
+.navLinks {
+  display: flex;
+  gap: 20px;
+}
+
+.navItem {
+  text-decoration: none;
+  color: white;
+  font-size: 1rem;
+  padding: 10px 16px;
+  border-radius: 6px;
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+
+.navItem:hover {
+  background: rgba(255, 20, 147, 0.2);
+  transform: translateY(-2px);
+}
+
+/* Connect Wallet Button */
+.connectButton {
+  background: transparent;
+  border: 2px solid #6a0dad;
+  color: white;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-weight: bold;
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+
+.connectButton:hover {
+  background: #ff1493;
+  border-color: #ff1493;
+}
+
+.connectButton:active {
+  background: #b8860b;
+  border-color: #b8860b;
+  transform: scale(0.95);
+}
