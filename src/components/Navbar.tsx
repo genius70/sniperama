@@ -179,12 +179,14 @@ const Navbar: React.FC = () => {
   };
 
 
-  return (
-    <nav className={styles.navbar}>
+  return <nav className={styles.navbar}>
       <Link to="/" className={styles.logo}>
         SNIPERAMA
       </Link>
       <div className={styles.navLinks}>
+        <Link to="/" className={styles.navItem}>
+          Home
+        </Link>
         <Link to="/tracking" className={styles.navItem}>
           Tracking
         </Link>
@@ -199,25 +201,16 @@ const Navbar: React.FC = () => {
         </Link>
       </div>
       <div className={styles.walletInfo}>
-        {chainId && SUPPORTED_CHAINS[chainId]
-          ? <span className={styles.chainIndicator}>
+        {chainId && SUPPORTED_CHAINS[chainId] ? <span className={styles.chainIndicator}>
               Chain: {SUPPORTED_CHAINS[chainId]}
-            </span>
-          : <span className={styles.chainIndicator}>Unsupported Chain</span>}
-        <button
-          className={styles.connectButton}
-          onClick={connectWallet}
-          disabled={isConnecting}
-        >
-          {isConnecting
-            ? "Connecting..."
-            : account
-              ? `Connected: ${account.slice(0, 6)}...${account.slice(-4)}`
-              : "Connect Wallet"}
+            </span> : <span className={styles.chainIndicator}>
+              Unsupported Chain
+            </span>}
+        <button className={styles.connectButton} onClick={connectWallet} disabled={isConnecting}>
+          {isConnecting ? "Connecting..." : account ? `Connected: ${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"}
         </button>
       </div>
-    </nav>
-  );
+    </nav>;
 };
 
 export default Navbar;
