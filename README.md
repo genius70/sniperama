@@ -9,7 +9,8 @@ Currently, two official plugins are available:
 
 git status
 git add .
-git commit -m "Committing all local changes before pulling"
+git commit -m "Committing all local changes before pulling" OR
+git commit -m "Committing all local changes before pushing"
 git pull origin main --rebase
 git push origin main
 
