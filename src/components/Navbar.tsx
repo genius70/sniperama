@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
+import styles from "@/styles/Navbar.module.css";
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ethers } from "ethers";
-import styles from "../styles/navbar.module.css";
 import { useWallet } from "@/hooks/useWallet";
 
 
@@ -196,6 +196,9 @@ const Navbar: React.FC = () => {
         <Link to="/profit-loss" className={styles.navItem}>
           Profit & Loss
         </Link>
+        <Link to="/options" className={styles.navItem}>
+          Options
+        </Link>
         <Link to="/settings" className={styles.navItem}>
           Settings
         </Link>
@@ -207,7 +210,7 @@ const Navbar: React.FC = () => {
               Unsupported Chain
             </span>}
         <button className={styles.connectButton} onClick={connectWallet} disabled={isConnecting}>
-          {isConnecting ? "Connecting..." : account ? `Connected: ${account.slice(0, 6)}...${account.slice(-4)}` : "Connect Wallet"}
+          {isConnecting ? "Connecting..." : account ? (typeof account === "string" ? `Connected: ${account.slice(0, 6)}...${account.slice(-4)}` : "Connected") : "Connect Wallet"}
         </button>
       </div>
     </nav>;

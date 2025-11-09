@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import Navbar from "@/components/Navbar";
 import Index from "@/pages/Index";
+import Options from "@/pages/Options";
 import ProfitLoss from "@/pages/ProfitLoss";
 import Reporting from "@/pages/Reporting";
 import Settings from "@/pages/Settings";
@@ -21,6 +22,7 @@ function App() {
             <Route path="/tracking" element={<Tracking />} />
             <Route path="/reporting" element={<Reporting />} />
             <Route path="/profit-loss" element={<ProfitLoss />} />
+            <Route path="/options" element={<Options />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

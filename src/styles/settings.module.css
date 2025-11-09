@@ -1,0 +1,330 @@
+/* settings.module.css */
+/* Main container styles */
+.settingsContainer {
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+.settingsTitle {
+  font-size: 2rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 0.5rem;
+  background: linear-gradient(to right, var(--primary-400), var(--primary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.settingsSubtitle {
+  text-align: center;
+  color: var(--muted-foreground);
+  margin-bottom: 2rem;
+}
+
+/* Progress indicator */
+.progressContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 2rem 0;
+}
+
+.progressTrack {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.progressStep {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.progressStep.active {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--primary);
+}
+
+.progressStep.completed {
+  background-color: var(--emerald-100);
+  color: var(--emerald-700);
+  border: 2px solid var(--emerald-500);
+}
+
+.progressStep.pending {
+  background-color: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.progressConnector {
+  height: 0.25rem;
+  width: 2rem;
+  border-radius: 9999px;
+  background-color: var(--muted);
+}
+
+.progressConnector.completed {
+  background-color: var(--emerald-500);
+}
+
+/* Step content */
+.stepContentContainer {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.stepHeader {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.stepIcon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+  color: var(--primary);
+}
+
+.stepTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.stepDescription {
+  color: var(--muted-foreground);
+}
+
+/* Form styles */
+.formGroup {
+  margin-bottom: 1.5rem;
+}
+
+.formLabel {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.formInput {
+  width: 100%;
+  height: 2.75rem;
+  padding: 0 1rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  background-color: var(--background);
+  transition: all 0.2s ease;
+}
+
+.formInput:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-25);
+}
+
+.formHelperText {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  margin-top: 0.25rem;
+}
+
+/* Grid layouts */
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 768px) {
+  .formGrid.cols2 {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .formGrid.cols3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+/* Info panels */
+.infoPanel {
+  padding: 1rem;
+  border-radius: 0.375rem;
+  margin: 1rem 0;
+}
+
+.infoPanel.primary {
+  background-color: var(--primary-50);
+  border: 1px solid var(--primary-200);
+  color: var(--primary-700);
+}
+
+.infoPanel.success {
+  background-color: var(--green-50);
+  border: 1px solid var(--green-200);
+  color: var(--green-700);
+}
+
+.infoPanel.warning {
+  background-color: var(--amber-50);
+  border: 1px solid var(--amber-200);
+  color: var(--amber-700);
+}
+
+.infoPanel.info {
+  background-color: var(--blue-50);
+  border: 1px solid var(--blue-200);
+  color: var(--blue-700);
+}
+
+/* Dark mode adjustments */
+:global(.dark) .infoPanel.primary {
+  background-color: var(--primary-950);
+  border: 1px solid var(--primary-800);
+  color: var(--primary-300);
+}
+
+:global(.dark) .infoPanel.success {
+  background-color: var(--green-950);
+  border: 1px solid var(--green-800);
+  color: var(--green-300);
+}
+
+:global(.dark) .infoPanel.warning {
+  background-color: var(--amber-950);
+  border: 1px solid var(--amber-800);
+  color: var(--amber-300);
+}
+
+:global(.dark) .infoPanel.info {
+  background-color: var(--blue-950);
+  border: 1px solid var(--blue-800);
+  color: var(--blue-300);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Slider styles */
+.sliderContainer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.sliderLabel {
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+  min-width: 2rem;
+}
+
+.sliderLabel.end {
+  text-align: right;
+}
+
+/* Switch container */
+.switchContainer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+  background-color: var(--muted-50);
+}
+
+/* Nested content */
+.nestedContent {
+  padding-left: 0.5rem;
+  margin-left: 0.5rem;
+  border-left: 2px solid var(--primary-200);
+}
+
+/* Button container */
+.buttonContainer {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Wallet connection overlay */
+.overlayContainer {
+  position: relative;
+  width: 100%;
+  max-width: 1000px;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(255, 255, 255, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  backdrop-filter: blur(4px);
+  border-radius: 0.5rem;
+}
+
+:global(.dark) .overlay {
+  background-color: rgba(0, 0, 0, 0.6);
+}
+
+.blurredContent {
+  opacity: 0.5;
+  filter: blur(2px);
+  pointer-events: none;
+}
+
+/* Connect wallet card */
+.connectCard {
+  width: 100%;
+  max-width: 20rem;
+  border-top: 4px solid var(--primary);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+.connectButton {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .progressStep {
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 0.875rem;
+  }
+  
+  .progressConnector {
+    width: 1rem;
+  }
+  
+  .stepTitle {
+    font-size: 1.25rem;
+  }
+}

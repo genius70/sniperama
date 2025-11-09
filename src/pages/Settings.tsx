@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -9,9 +9,10 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { RefreshCcw, Save } from 'lucide-react';
+import { RefreshCcw, Save, Wallet, Sliders, Bell, Network, Link2, ArrowRight, ArrowLeft, Check, AlertTriangle } from 'lucide-react';
 //import SniperamaABI from '../abis/Sniperama.json';
 import { SniperamaContract } from '../types/interfaces';
+import styles from '../styles/settings.module.css';
 
 // Contract addresses for different blockchains
 const CONTRACT_ADDRESSES = {
@@ -46,9 +47,10 @@ const CHAIN_TOKENS = {
 interface SettingsProps {
   connected: boolean;
   account: string;
+  onConnectWallet?: () => void;
 }
 
-export default function Settings({ connected, account }: SettingsProps) {
+export default function Settings({ connected, account, onConnectWallet }: SettingsProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState<boolean>(false);
   const [contract, setContract] = useState<SniperamaContract | null>(null);
@@ -71,7 +73,10 @@ export default function Settings({ connected, account }: SettingsProps) {
   const [timerInterval, setTimerInterval] = useState<number>(4);
   const [contractStatus, setContractStatus] = useState<string>('Not Connected');
   const [isContractActive, setIsContractActive] = useState<boolean>(false);
-
+  
+  // Active tab state - renamed to currentStep for clarity
+  const [currentStep, setCurrentStep] = useState<number>(1);
+  const totalSteps = 4;
   const initializeContract = async (): Promise<void> => {
     if (!window.ethereum || !connected) return;
     
@@ -217,264 +222,483 @@ export default function Settings({ connected, account }: SettingsProps) {
     }
   }, [selectedNetwork]);
 
-  if (!connected) {
+  // Step navigation functions
+  const goToNextStep = () => {
+    if (currentStep < totalSteps) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const goToPreviousStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+  // Progress indicator - shows which step the user is on
+  const ProgressIndicator = () => {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-6">Bot Settings</h1>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-center">Please connect your wallet to access settings.</p>
-          </CardContent>
-        </Card>
+      <div className={styles.progressContainer}>
+        <div className={styles.progressTrack}>
+          {Array.from({ length: totalSteps }).map((_, index) => (
+            <React.Fragment key={index}>
+              <button
+                onClick={() => setCurrentStep(index + 1)}
+                className={`${styles.progressStep} ${
+                  currentStep === index + 1
+                    ? styles.active
+                    : currentStep > index + 1
+                    ? styles.completed
+                    : styles.pending
+                }`}
+              >
+                {currentStep > index + 1 ? <Check size={18} /> : index + 1}
+              </button>
+              {index < totalSteps - 1 && (
+                <div className={`${styles.progressConnector} ${
+                  currentStep > index + 1 ? styles.completed : ''
+                }`} />
+              )}
+            </React.Fragment>
+          ))}
+        </div>
       </div>
     );
-  }
+  };
 
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Bot Settings</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Trading Settings</CardTitle>
-            <CardDescription>Configure how the bot trades tokens</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Label htmlFor="slippage">Slippage Tolerance: {slippageTolerance}%</Label>
-              </div>
-              <Slider 
-                id="slippage"
-                min={0.1} 
-                max={20} 
-                step={0.1} 
-                value={[slippageTolerance]} 
-                onValueChange={(value) => setSlippageTolerance(value[0])} 
-              />
-            </div>
-            
-            <div className="grid w-full items-center gap-1.5">
-              <Label htmlFor="gasPrice">Gas Price (Gwei)</Label>
-              <Input
-                id="gasPrice"
-                type="number"
-                placeholder="50"
-                value={gasPrice}
-                onChange={(e) => setGasPrice(e.target.value)}
-              />
-            </div>
-            
-            <div className="grid w-full items-center gap-1.5">
-              <Label htmlFor="gasLimit">Gas Limit</Label>
-              <Input
-                id="gasLimit"
-                type="number"
-                placeholder="300000"
-                value={gasLimit}
-                onChange={(e) => setGasLimit(e.target.value)}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <Label htmlFor="defaultSell">Default Sell Percentage: {defaultSellPercent}%</Label>
-              </div>
-              <Slider 
-                id="defaultSell"
-                min={1} 
-                max={100} 
-                step={1} 
-                value={[defaultSellPercent]} 
-                onValueChange={(value) => setDefaultSellPercent(value[0])} 
-              />
-            </div>
-            
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="autoSell"
-                checked={autoSellEnabled}
-                onCheckedChange={setAutoSellEnabled}
-              />
-              <Label htmlFor="autoSell">Enable Auto Sell</Label>
-            </div>
-            
-            {autoSellEnabled && (
-              <>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <Label htmlFor="profitTarget">Profit Target: {autoSellTargetPercent}%</Label>
-                  </div>
-                  <Slider 
-                    id="profitTarget"
-                    min={101} 
-                    max={1000} 
-                    step={1} 
-                    value={[autoSellTargetPercent]} 
-                    onValueChange={(value) => setAutoSellTargetPercent(value[0])} 
-                  />
+  // Step titles and descriptions
+  const stepInfo = [
+    {
+      title: "Network Selection",
+      description: "Choose which blockchain network to operate on",
+      icon: <Network size={24} className={styles.stepIcon} />
+    },
+    {
+      title: "Chain Settings",
+      description: "Configure parameters specific to the selected blockchain",
+      icon: <Link2 size={24} className={styles.stepIcon} />
+    },
+    {
+      title: "Trading Parameters",
+      description: "Set up trading rules and automation preferences",
+      icon: <Sliders size={24} className={styles.stepIcon} />
+    },
+    {
+      title: "Notifications",
+      description: "Configure how you receive alerts about trades",
+      icon: <Bell size={24} className={styles.stepIcon} />
+    }
+  ];
+
+  // Settings content - this will be shown both in the overlay and when authenticated
+  const settingsContent = (
+    <>
+      <div className={styles.settingsContainer}>
+        {/* Step progress indicator */}
+        <ProgressIndicator />
+        
+        {/* Step title and info */}
+        <div className={styles.stepHeader}>
+          <div className={styles.stepIcon}>
+            {stepInfo[currentStep - 1].icon}
+          </div>
+          <h2 className={styles.stepTitle}>{`Step ${currentStep}: ${stepInfo[currentStep - 1].title}`}</h2>
+          <p className={styles.stepDescription}>{stepInfo[currentStep - 1].description}</p>
+        </div>
+
+        {/* Step content */}
+        <div className={styles.stepContentContainer}>
+          {currentStep === 1 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Network size={20} className="text-primary" />
+                  Network Selection
+                </CardTitle>
+                <CardDescription>Choose which blockchain network to operate on</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className={styles.formGroup}>
+                  <Label htmlFor="network" className={styles.formLabel}>Blockchain Network</Label>
+                  <Select value={selectedNetwork} onValueChange={setSelectedNetwork}>
+                    <SelectTrigger id="network" className={styles.formInput}>
+                      <SelectValue placeholder="Select a network" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="avalanche">Avalanche</SelectItem>
+                      <SelectItem value="ethereum">Ethereum</SelectItem>
+                      <SelectItem value="bsc">Binance Smart Chain</SelectItem>
+                      <SelectItem value="polygon">Polygon</SelectItem>
+                      <SelectItem value="fantom">Fantom</SelectItem>
+                      <SelectItem value="arbitrum">Arbitrum</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <Label htmlFor="stopLoss">Stop Loss: {autoSellStopLossPercent}%</Label>
+                <div className={`${styles.infoPanel} ${styles.info}`}>
+                  <div className="text-sm">
+                    Contract Status: 
+                    <span className={`ml-2 font-medium ${contractStatus.includes('Error') ? 'text-red-500' : 'text-green-500'}`}>
+                      {contractStatus}
+                    </span>
                   </div>
-                  <Slider 
-                    id="stopLoss"
-                    min={1} 
-                    max={99} 
-                    step={1} 
-                    value={[autoSellStopLossPercent]} 
-                    onValueChange={(value) => setAutoSellStopLossPercent(value[0])} 
-                  />
                 </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-        
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Network Settings</CardTitle>
-              <CardDescription>Configure network and chain settings</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid w-full items-center gap-1.5">
-                <Label htmlFor="network">Blockchain Network</Label>
-                <Select value={selectedNetwork} onValueChange={setSelectedNetwork}>
-                  <SelectTrigger id="network">
-                    <SelectValue placeholder="Select a network" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="avalanche">Avalanche</SelectItem>
-                    <SelectItem value="ethereum">Ethereum</SelectItem>
-                    <SelectItem value="bsc">Binance Smart Chain</SelectItem>
-                    <SelectItem value="polygon">Polygon</SelectItem>
-                    <SelectItem value="fantom">Fantom</SelectItem>
-                    <SelectItem value="arbitrum">Arbitrum</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="text-sm text-muted-foreground mt-2">
-                Contract Status: <span className={contractStatus.includes('Error') ? 'text-red-500' : 'text-green-500'}>{contractStatus}</span>
-              </div>
-              
-              <div className="flex items-center space-x-2 pt-2">
-                <Switch
-                  id="contractActive"
-                  checked={isContractActive}
-                  onCheckedChange={setIsContractActive}
-                />
-                <Label htmlFor="contractActive">Activate Bot on {selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)}</Label>
-              </div>
-            </CardContent>
-          </Card>
-          
-          {/* New Card for Chain-Specific Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Chain-Specific Settings</CardTitle>
-              <CardDescription>Configure parameters for {selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid w-full items-center gap-1.5">
-                <Label htmlFor="minAmount">Minimum Amount (USD value in {CHAIN_TOKENS[selectedNetwork as keyof typeof CHAIN_TOKENS]})</Label>
-                <Input
-                  id="minAmount"
-                  type="number"
-                  placeholder="250"
-                  value={minAmount}
-                  onChange={(e) => setMinAmount(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Recommended minimum: $250 worth of {CHAIN_TOKENS[selectedNetwork as keyof typeof CHAIN_TOKENS]}
-                </p>
-              </div>
-              
-              <div className="grid w-full items-center gap-1.5">
-                <Label htmlFor="timerInterval">Timer Interval (hours)</Label>
-                <Select 
-                  value={timerInterval.toString()} 
-                  onValueChange={(value) => setTimerInterval(parseInt(value))}
-                >
-                  <SelectTrigger id="timerInterval">
-                    <SelectValue placeholder="Select interval" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1 hour</SelectItem>
-                    <SelectItem value="2">2 hours</SelectItem>
-                    <SelectItem value="4">4 hours</SelectItem>
-                    <SelectItem value="6">6 hours</SelectItem>
-                    <SelectItem value="8">8 hours</SelectItem>
-                    <SelectItem value="12">12 hours</SelectItem>
-                    <SelectItem value="24">24 hours</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Recommended interval: 4 hours
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Settings</CardTitle>
-              <CardDescription>Configure how you receive alerts</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="telegramNotify"
-                  checked={telegramNotifications}
-                  onCheckedChange={setTelegramNotifications}
-                />
-                <Label htmlFor="telegramNotify">Enable Telegram Notifications</Label>
-              </div>
-              
-              {telegramNotifications && (
-                <>
-                  <div className="grid w-full items-center gap-1.5">
-                    <Label htmlFor="telegramToken">Telegram Bot Token</Label>
+                
+                <div className={styles.switchContainer}>
+                  <Switch
+                    id="contractActive"
+                    checked={isContractActive}
+                    onCheckedChange={setIsContractActive}
+                  />
+                  <Label htmlFor="contractActive" className="font-medium">
+                    Activate Bot on {selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)}
+                  </Label>
+                </div>
+
+                <div className={`${styles.infoPanel} ${styles.warning}`}>
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={16} />
+                    <span className="font-medium">Important Note</span>
+                  </div>
+                  <p className="mt-2 text-sm">
+                    Make sure you have sufficient funds on {selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)} to cover gas fees and trading operations.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {currentStep === 2 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Link2 size={20} className="text-primary" />
+                  Chain Settings
+                </CardTitle>
+                <CardDescription>Configure parameters for {selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1)}</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className={styles.formGroup}>
+                  <Label htmlFor="minAmount" className={styles.formLabel}>
+                    Minimum Amount (USD value in {CHAIN_TOKENS[selectedNetwork as keyof typeof CHAIN_TOKENS]})
+                  </Label>
+                  <Input
+                    id="minAmount"
+                    type="number"
+                    placeholder="250"
+                    value={minAmount}
+                    onChange={(e) => setMinAmount(e.target.value)}
+                    className={styles.formInput}
+                  />
+                  <p className={styles.formHelperText}>
+                    Recommended minimum: $250 worth of {CHAIN_TOKENS[selectedNetwork as keyof typeof CHAIN_TOKENS]}
+                  </p>
+                </div>
+                
+                <div className={styles.formGroup}>
+                  <Label htmlFor="timerInterval" className={styles.formLabel}>Timer Interval (hours)</Label>
+                  <Select 
+                    value={timerInterval.toString()} 
+                    onValueChange={(value) => setTimerInterval(parseInt(value))}
+                  >
+                    <SelectTrigger id="timerInterval" className={styles.formInput}>
+                      <SelectValue placeholder="Select interval" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 hour</SelectItem>
+                      <SelectItem value="2">2 hours</SelectItem>
+                      <SelectItem value="4">4 hours</SelectItem>
+                      <SelectItem value="6">6 hours</SelectItem>
+                      <SelectItem value="8">8 hours</SelectItem>
+                      <SelectItem value="12">12 hours</SelectItem>
+                      <SelectItem value="24">24 hours</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className={styles.formHelperText}>
+                    Recommended interval: 4 hours
+                  </p>
+                </div>
+
+                <div className={`${styles.infoPanel} ${styles.info}`}>
+                  <p className="font-medium mb-1">Chain Information:</p>
+                  <ul className="space-y-1 list-disc list-inside text-xs">
+                    <li>Native token: {CHAIN_TOKENS[selectedNetwork as keyof typeof CHAIN_TOKENS]}</li>
+                    <li>Contract address: {CONTRACT_ADDRESSES[selectedNetwork as keyof typeof CONTRACT_ADDRESSES].substring(0, 6)}...{CONTRACT_ADDRESSES[selectedNetwork as keyof typeof CONTRACT_ADDRESSES].substring(38)}</li>
+                    <li>Average gas price: 50 Gwei</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {currentStep === 3 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sliders size={20} className="text-primary" />
+                  Trading Parameters
+                </CardTitle>
+                <CardDescription>Configure how the bot trades tokens</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className={styles.formGroup}>
+                  <Label htmlFor="slippage" className={styles.formLabel}>Slippage Tolerance: {slippageTolerance}%</Label>
+                  <div className={styles.sliderContainer}>
+                    <span className={styles.sliderLabel}>0.1%</span>
+                    <Slider 
+                      id="slippage"
+                      min={0.1} 
+                      max={20} 
+                      step={0.1} 
+                      value={[slippageTolerance]} 
+                      onValueChange={(value) => setSlippageTolerance(value[0])} 
+                      className="flex-1"
+                    />
+                    <span className={`${styles.sliderLabel} ${styles.end}`}>20%</span>
+                  </div>
+                </div>
+                
+                <div className={`${styles.formGrid} ${styles.cols2}`}>
+                  <div className={styles.formGroup}>
+                    <Label htmlFor="gasPrice" className={styles.formLabel}>Gas Price (Gwei)</Label>
                     <Input
-                      id="telegramToken"
-                      type="password"
-                      placeholder="Your Telegram bot token"
-                      value={telegramBotToken}
-                      onChange={(e) => setTelegramBotToken(e.target.value)}
+                      id="gasPrice"
+                      type="number"
+                      placeholder="50"
+                      value={gasPrice}
+                      onChange={(e) => setGasPrice(e.target.value)}
+                      className={styles.formInput}
                     />
                   </div>
                   
-                  <div className="grid w-full items-center gap-1.5">
-                    <Label htmlFor="telegramChat">Telegram Chat ID</Label>
+                  <div className={styles.formGroup}>
+                    <Label htmlFor="gasLimit" className={styles.formLabel}>Gas Limit</Label>
                     <Input
-                      id="telegramChat"
-                      placeholder="Your Telegram chat ID"
-                      value={telegramChatId}
-                      onChange={(e) => setTelegramChatId(e.target.value)}
+                      id="gasLimit"
+                      type="number"
+                      placeholder="300000"
+                      value={gasLimit}
+                      onChange={(e) => setGasLimit(e.target.value)}
+                      className={styles.formInput}
                     />
                   </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-          
+                </div>
+                
+                <div className={styles.formGroup}>
+                  <Label htmlFor="defaultSell" className={styles.formLabel}>Default Sell Percentage: {defaultSellPercent}%</Label>
+                  <div className={styles.sliderContainer}>
+                    <span className={styles.sliderLabel}>1%</span>
+                    <Slider 
+                      id="defaultSell"
+                      min={1} 
+                      max={100} 
+                      step={1} 
+                      value={[defaultSellPercent]} 
+                      onValueChange={(value) => setDefaultSellPercent(value[0])} 
+                      className="flex-1"
+                    />
+                    <span className={`${styles.sliderLabel} ${styles.end}`}>100%</span>
+                  </div>
+                </div>
+                
+                <div className={styles.formGroup}>
+                  <div className={styles.switchContainer}>
+                    <Switch
+                      id="autoSell"
+                      checked={autoSellEnabled}
+                      onCheckedChange={setAutoSellEnabled}
+                    />
+                    <Label htmlFor="autoSell" className="font-medium">Enable Auto Sell</Label>
+                  </div>
+                  
+                  {autoSellEnabled && (
+                    <div className={styles.nestedContent}>
+                      <div className={styles.formGroup}>
+                        <Label htmlFor="profitTarget" className={styles.formLabel}>Profit Target: {autoSellTargetPercent}%</Label>
+                        <div className={styles.sliderContainer}>
+                          <span className={styles.sliderLabel}>101%</span>
+                          <Slider 
+                            id="profitTarget"
+                            min={101} 
+                            max={1000} 
+                            step={1} 
+                            value={[autoSellTargetPercent]} 
+                            onValueChange={(value) => setAutoSellTargetPercent(value[0])} 
+                            className="flex-1"
+                          />
+                          <span className={`${styles.sliderLabel} ${styles.end}`}>1000%</span>
+                        </div>
+                      </div>
+                      
+                      <div className={styles.formGroup}>
+                        <Label htmlFor="stopLoss" className={styles.formLabel}>Stop Loss: {autoSellStopLossPercent}%</Label>
+                        <div className={styles.sliderContainer}>
+                          <span className={styles.sliderLabel}>1%</span>
+                          <Slider 
+                            id="stopLoss"
+                            min={1} 
+                            max={99} 
+                            step={1} 
+                            value={[autoSellStopLossPercent]} 
+                            onValueChange={(value) => setAutoSellStopLossPercent(value[0])} 
+                            className="flex-1"
+                          />
+                          <span className={`${styles.sliderLabel} ${styles.end}`}>99%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {currentStep === 4 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Bell size={20} className="text-primary" />
+                  Notification Settings
+                </CardTitle>
+                <CardDescription>Configure how you receive alerts</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className={styles.switchContainer}>
+                  <Switch
+                    id="telegramNotify"
+                    checked={telegramNotifications}
+                    onCheckedChange={setTelegramNotifications}
+                  />
+                  <Label htmlFor="telegramNotify" className="font-medium">Enable Telegram Notifications</Label>
+                </div>
+                
+                {telegramNotifications && (
+                  <div className={styles.nestedContent}>
+                    <div className={styles.formGroup}>
+                      <Label htmlFor="telegramToken" className={styles.formLabel}>Telegram Bot Token</Label>
+                      <Input
+                        id="telegramToken"
+                        type="password"
+                        placeholder="Your Telegram bot token"
+                        value={telegramBotToken}
+                        onChange={(e) => setTelegramBotToken(e.target.value)}
+                        className={styles.formInput}
+                      />
+                    </div>
+                    
+                    <div className={styles.formGroup}>
+                      <Label htmlFor="telegramChat" className={styles.formLabel}>Telegram Chat ID</Label>
+                      <Input
+                        id="telegramChat"
+                        placeholder="Your Telegram chat ID"
+                        value={telegramChatId}
+                        onChange={(e) => setTelegramChatId(e.target.value)}
+                        className={styles.formInput}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className={`${styles.infoPanel} ${styles.success}`}>
+                  <div className="text-center">
+                    <Check size={24} className="mx-auto mb-2" />
+                    <p className="font-medium">Setup Complete!</p>
+                    <p className="text-sm mt-1">Click "Save Settings" below to activate your bot configuration.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <CardFooter className={styles.buttonContainer}>
+            <Button 
+              variant="outline" 
+              onClick={goToPreviousStep} 
+              disabled={currentStep === 1}
+              className="gap-2"
+            >
+              <ArrowLeft size={16} />
+              Previous
+            </Button>
+            
+            {currentStep < totalSteps ? (
+              <Button onClick={goToNextStep} className="gap-2">
+                Next
+                <ArrowRight size={16} />
+              </Button>
+            ) : (
+              <Button 
+                onClick={saveSettings} 
+                disabled={loading || !connected || !contract}
+                className="gap-2 bg-green-600 hover:bg-green-700"
+              >
+                {loading ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                Save Settings
+              </Button>
+            )}
+          </CardFooter>
         </div>
       </div>
       
-      <div className="mt-6 flex justify-end space-x-4">
-        <Button variant="outline" onClick={initializeContract} disabled={loading || !connected}>
+      <div className="mt-6 flex justify-center gap-4">
+        <Button 
+          variant="outline" 
+          onClick={initializeContract} 
+          disabled={loading || !connected}
+          size="lg"
+          className="min-w-28 transition-all duration-200 hover:border-primary"
+        >
           {loading ? <RefreshCcw className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCcw className="mr-2 h-4 w-4" />}
-          Connect to Contract
-        </Button>
-        <Button onClick={saveSettings} disabled={loading || !connected || !contract}>
-          {loading ? <RefreshCcw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-          Save Settings
+          Refresh Connection
         </Button>
       </div>
+    </>
+  );
+
+  return (
+    <div className={styles.settingsContainer}>
+      <div className="w-full max-w-4xl mb-8">
+        <h1 className={styles.settingsTitle}>
+          Bot Configuration Wizard
+        </h1>
+        <p className={styles.settingsSubtitle}>Follow each step to set up your trading bot</p>
+      </div>
+      
+      {/* Conditional rendering with overlay for unauthenticated users */}
+      {!connected ? (
+        <div className={styles.overlayContainer}>
+          {/* Light overlay */}
+          <div className={styles.overlay}>
+            <Card className={styles.connectCard}>
+              <CardHeader>
+                <CardTitle className="text-center">Connect Wallet</CardTitle>
+                <CardDescription className="text-center">Please connect your wallet to access settings</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center gap-4">
+                <Button 
+                  onClick={onConnectWallet} 
+                  size="lg" 
+                  className={styles.connectButton}
+                >
+                  <Wallet className="mr-2 h-4 w-4" />
+                  Connect Wallet
+                </Button>
+              </CardContent>
+              <CardFooter className="text-sm text-center text-muted-foreground">
+                Connection required to configure and activate the bot
+              </CardFooter>
+            </Card>
+          </div>
+          
+          {/* Blurred content in background */}
+          <div className={styles.blurredContent}>
+            {settingsContent}
+          </div>
+        </div>
+      ) : (
+        <div className="w-full max-w-4xl">
+          {settingsContent}
+        </div>
+      )}
     </div>
   );
 }

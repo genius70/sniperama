@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 // Import required interfaces for Polygon interactions
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 // QuickSwap interfaces (Polygon's main DEX)
 interface IQuickSwapFactory {
@@ -65,7 +66,7 @@ interface ILiquidityLocker {
     function userLpLockInfo(address user, uint256 index) external view returns (address lpToken, uint256 amount, uint256 unlockTime);
 }
 
-contract PolySniper {
+contract PolySniper is ReentrancyGuard {
     // Polygon-specific addresses
     address public constant WMATIC = 0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270;
     address public constant QUICK_ROUTER = 0xa5E0829CaCEd8fFDD4De3c43696c57F7D7A678ff;
@@ -87,6 +88,17 @@ contract PolySniper {
     uint256 public stopLossPercentage = 15; // 15% drop
     uint256 public maxHoldingTime = 72 hours; // 72 hours maximum holding time
     
+    // Fee parameters
+    uint256 public snipeFeePercentage = 50; // 0.5% fee on snipe amount
+    uint256 public profitFeePercentage = 500; // 5% fee on profit
+    address public feeReceiver;
+    
+    // Slippage control
+    uint256 public maxSlippage = 500; // 5% max slippage
+    
+    // MEV protection
+    uint256 public blockDeadline = 3; // Number of blocks for transaction to be valid
+    
     // Trading state
     struct Trade {
         address token;
@@ -95,22 +107,40 @@ contract PolySniper {
         uint256 amountBought;
         bool active;
         uint256 highestPrice;
+        uint256 investedMatic;
     }
     
     mapping(address => Trade[]) public userTrades;
+    mapping(address => uint256) public userTradeCount;  // Gas optimization for querying
     mapping(address => bool) public knownScams;
+    mapping(bytes32 => bool) public processedTransactions; // Anti front-running
+    
     address public owner;
+    bool private locked; // Reentrancy guard state
+    
+    // Honeypot detection flags
+    bytes4[] public suspiciousSelectors = [
+        bytes4(keccak256("setMaxTxAmount(uint256)")),
+        bytes4(keccak256("setFeeExempt(address,bool)")),
+        bytes4(keccak256("blacklist(address)")),
+        bytes4(keccak256("blacklistAddress(address)")),
+        bytes4(keccak256("setTradingEnabled(bool)")),
+        bytes4(keccak256("setMaxWallet(uint256)"))
+    ];
     
     // Events
-    event TokenSniped(address indexed token, uint256 amount, uint256 buyPrice);
-    event TokenSold(address indexed token, uint256 amount, uint256 sellPrice, uint256 profit, string reason);
+    event TokenSniped(address indexed user, address indexed token, uint256 amount, uint256 buyPrice, uint256 fee);
+    event TokenSold(address indexed user, address indexed token, uint256 amount, uint256 sellPrice, uint256 profit, uint256 fee, string reason);
     event ScamDetected(address indexed token, string reason);
     event TradeParametersUpdated(string paramName, uint256 newValue);
+    event FeeUpdated(string feeType, uint256 newValue);
+    event FeeReceiverUpdated(address newReceiver);
     
-    constructor() {
+    constructor() ReentrancyGuard() {
         // Approve max token spending to routers
         IERC20(WMATIC).approve(QUICK_ROUTER, type(uint256).max);
         owner = msg.sender;
+        feeReceiver = msg.sender; // Default fee receiver is owner
     }
     
     // Simple modifier to replace Ownable
@@ -119,23 +149,60 @@ contract PolySniper {
         _;
     }
     
+    // Anti front-running modifier
+    modifier protectAgainstMEV(bytes32 txHash) {
+        require(!processedTransactions[txHash], "Transaction already processed");
+        require(block.number <= tx.gasprice + blockDeadline, "Transaction expired");
+        processedTransactions[txHash] = true;
+        _;
+    }
+    
     receive() external payable {}
     
     /**
-     * @dev Start sniping a newly detected token
+     * @dev Start sniping a newly detected token with MEV protection
      * @param tokenAddress Address of the token to snipe
      * @param amount Amount of MATIC to use for sniping
+     * @param maxGasPrice Maximum gas price to prevent front-running
+     * @param salt Random value to make transaction hash unique
      */
-    function snipeToken(address tokenAddress, uint256 amount) external payable {
+    function snipeToken(
+        address tokenAddress, 
+        uint256 amount, 
+        uint256 maxGasPrice,
+        uint256 salt
+    ) external payable nonReentrant {
+        require(tx.gasprice <= maxGasPrice, "Gas price too high");
         require(amount > 0, "Amount must be greater than 0");
-        require(msg.value >= amount, "Insufficient MATIC sent");
+        
+        // Calculate required MATIC including fee
+        uint256 fee = (amount * snipeFeePercentage) / 10000;
+        uint256 totalRequired = amount + fee;
+        require(msg.value >= totalRequired, "Insufficient MATIC sent");
+        
+        // Create unique transaction hash to prevent front-running
+        bytes32 txHash = keccak256(abi.encodePacked(
+            msg.sender,
+            tokenAddress,
+            amount,
+            salt,
+            block.number
+        ));
+        
+        // Anti MEV protection
+        protectAgainstMEV(txHash);
         
         // Verify the token meets our criteria
         require(verifyTokenMetrics(tokenAddress), "Token does not meet required metrics");
         require(!isHoneypot(tokenAddress), "Token appears to be a honeypot");
         require(isLiquidityLocked(tokenAddress), "Liquidity is not sufficiently locked");
         
-        // Perform the swap
+        // Transfer fee to receiver
+        if (fee > 0) {
+            payable(feeReceiver).transfer(fee);
+        }
+        
+        // Perform the swap with slippage control
         uint256 tokensBought = swapMaticForTokens(tokenAddress, amount);
         uint256 currentPrice = getTokenPrice(tokenAddress);
         
@@ -146,20 +213,29 @@ contract PolySniper {
             buyPrice: currentPrice,
             amountBought: tokensBought,
             active: true,
-            highestPrice: currentPrice
+            highestPrice: currentPrice,
+            investedMatic: amount
         });
         
         userTrades[msg.sender].push(newTrade);
+        userTradeCount[msg.sender]++;
         
-        emit TokenSniped(tokenAddress, tokensBought, currentPrice);
+        // Refund excess MATIC
+        uint256 refundAmount = msg.value - totalRequired;
+        if (refundAmount > 0) {
+            payable(msg.sender).transfer(refundAmount);
+        }
+        
+        emit TokenSniped(msg.sender, tokenAddress, tokensBought, currentPrice, fee);
     }
     
     /**
      * @dev Check and potentially exit trades based on our criteria
      * @param userAddress Address of the user whose trades to check
      */
-    function checkAndExitTrades(address userAddress) external {
+    function checkAndExitTrades(address userAddress) external nonReentrant {
         Trade[] storage trades = userTrades[userAddress];
+        uint256 count = userTradeCount[userAddress];
         
         for (uint256 i = 0; i < trades.length; i++) {
             if (!trades[i].active) continue;
@@ -192,23 +268,73 @@ contract PolySniper {
             }
             
             if (shouldExit) {
-                // Sell the tokens
-                uint256 tokensToSell = IERC20(trades[i].token).balanceOf(address(this));
-                uint256 maticReceived = swapTokensForMatic(trades[i].token, tokensToSell);
-                
-                // Calculate profit
-                uint256 profit = currentPrice > trades[i].buyPrice ? 
-                    ((currentPrice - trades[i].buyPrice) * tokensToSell / 10**18) : 0;
-                
-                // Mark trade as inactive
-                trades[i].active = false;
-                
-                // Send MATIC back to user
-                payable(userAddress).transfer(maticReceived);
-                
-                emit TokenSold(trades[i].token, tokensToSell, currentPrice, profit, exitReason);
+                // Execute the trade exit
+                _exitTrade(userAddress, i, currentPrice, exitReason);
+                userTradeCount[userAddress]--;
             }
         }
+    }
+    
+    /**
+     * @dev Exit a specific trade (internal function to reduce gas costs)
+     */
+    function _exitTrade(
+        address userAddress, 
+        uint256 tradeIndex, 
+        uint256 currentPrice, 
+        string memory exitReason
+    ) internal {
+        Trade storage trade = userTrades[userAddress][tradeIndex];
+        
+        // Sell the tokens
+        uint256 tokensToSell = IERC20(trade.token).balanceOf(address(this));
+        uint256 maticReceived = swapTokensForMatic(trade.token, tokensToSell);
+        
+        // Calculate profit
+        uint256 profit = 0;
+        if (maticReceived > trade.investedMatic) {
+            profit = maticReceived - trade.investedMatic;
+        }
+        
+        // Calculate profit fee if there's profit
+        uint256 fee = 0;
+        if (profit > 0) {
+            fee = (profit * profitFeePercentage) / 10000;
+            if (fee > 0) {
+                payable(feeReceiver).transfer(fee);
+                maticReceived -= fee;
+            }
+        }
+        
+        // Mark trade as inactive
+        trade.active = false;
+        
+        // Send MATIC back to user
+        if (maticReceived > 0) {
+            payable(userAddress).transfer(maticReceived);
+        }
+        
+        emit TokenSold(
+            userAddress, 
+            trade.token, 
+            tokensToSell, 
+            currentPrice, 
+            profit, 
+            fee, 
+            exitReason
+        );
+    }
+    
+    /**
+     * @dev Force exit a specific trade (for emergencies or user manual exit)
+     */
+    function forceExitTrade(uint256 tradeIndex) external nonReentrant {
+        require(tradeIndex < userTrades[msg.sender].length, "Invalid trade index");
+        require(userTrades[msg.sender][tradeIndex].active, "Trade not active");
+        
+        uint256 currentPrice = getTokenPrice(userTrades[msg.sender][tradeIndex].token);
+        _exitTrade(msg.sender, tradeIndex, currentPrice, "Manual exit");
+        userTradeCount[msg.sender]--;
     }
     
     /**
@@ -269,7 +395,7 @@ contract PolySniper {
     }
     
     /**
-     * @dev Check if token is a potential honeypot
+     * @dev Enhanced honeypot detection
      * @param tokenAddress Address of the token to check
      * @return bool True if token appears to be a honeypot
      */
@@ -298,9 +424,6 @@ contract PolySniper {
      * @return bool True if token has excessive fees
      */
     function hasExcessiveFees(address tokenAddress) internal view returns (bool) {
-        // This would require analyzing the token's bytecode or testing transfers
-        // For simplicity, we'll use a basic approach
-        
         // Get pair and reserves
         address pairAddress = IQuickSwapFactory(QUICK_FACTORY).getPair(tokenAddress, WMATIC);
         if (pairAddress == address(0)) return false;
@@ -330,15 +453,52 @@ contract PolySniper {
             return true; // Failed, likely restricted
         }
         
-        // If actual output is less than 90% of expected, fees are excessive
-        return amountOutActual < (amountOutExpected * 90 / 100);
+        // If actual output is less than 85% of expected, fees are excessive
+        return amountOutActual < (amountOutExpected * 85 / 100);
     }
     
- 
-    function hasBlacklistFunction(address /*tokenAddress*/) internal pure returns (bool) {
-        // This would require analyzing the token's bytecode
-        // For a complete implementation, use a bytecode analyzer
-        // Simplified implementation for demonstration
+    /**
+     * @dev Check if token has blacklist functions by examining its code
+     * @param tokenAddress Address of the token to check
+     * @return bool True if token has suspicious functions
+     */
+    function hasBlacklistFunction(address tokenAddress) internal view returns (bool) {
+        // Get contract bytecode
+        bytes memory bytecode;
+        assembly {
+            // retrieve the size of the code
+            let size := extcodesize(tokenAddress)
+            // allocate output byte array
+            bytecode := mload(0x40)
+            // new "memory end" including padding
+            mstore(0x40, add(bytecode, and(add(add(size, 0x20), 0x1f), not(0x1f))))
+            // store length in memory
+            mstore(bytecode, size)
+            // actually retrieve the code
+            extcodecopy(tokenAddress, add(bytecode, 0x20), 0, size)
+        }
+        
+        // Check for suspicious function signatures
+        for (uint i = 0; i < suspiciousSelectors.length; i++) {
+            bytes4 selector = suspiciousSelectors[i];
+            bytes memory selectorBytes = abi.encodePacked(selector);
+            
+            bool found = false;
+            for (uint j = 0; j < bytecode.length - 4; j++) {
+                if (bytecode[j] == selectorBytes[0] && 
+                    bytecode[j+1] == selectorBytes[1] && 
+                    bytecode[j+2] == selectorBytes[2] && 
+                    bytecode[j+3] == selectorBytes[3]) {
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (found) {
+                return true;
+            }
+        }
+
         return false;
     }
     
@@ -393,7 +553,7 @@ contract PolySniper {
     }
     
     /**
-     * @dev Swap MATIC for tokens
+     * @dev Swap MATIC for tokens with slippage protection
      * @param tokenAddress Address of the token to buy
      * @param amount Amount of MATIC to swap
      * @return uint256 Amount of tokens bought
@@ -403,8 +563,12 @@ contract PolySniper {
         path[0] = WMATIC;
         path[1] = tokenAddress;
         
+        // Calculate minimum amount of tokens to receive (with slippage protection)
+        uint256[] memory expectedAmounts = IQuickSwapRouter(QUICK_ROUTER).getAmountsOut(amount, path);
+        uint256 minOutput = expectedAmounts[1] * (10000 - maxSlippage) / 10000;
+        
         uint256[] memory amounts = IQuickSwapRouter(QUICK_ROUTER).swapExactMATICForTokens{value: amount}(
-            0, // no minimum output (we accept any slippage for sniping)
+            minOutput, // 5% slippage protection
             path,
             address(this),
             block.timestamp + 300 // 5 minute deadline
@@ -414,7 +578,7 @@ contract PolySniper {
     }
     
     /**
-     * @dev Swap tokens for MATIC
+     * @dev Swap tokens for MATIC with slippage protection
      * @param tokenAddress Address of the token to sell
      * @param amount Amount of tokens to swap
      * @return uint256 Amount of MATIC received
@@ -427,11 +591,15 @@ contract PolySniper {
         path[0] = tokenAddress;
         path[1] = WMATIC;
         
+        // Calculate minimum amount of MATIC to receive (with slippage protection)
+        uint256[] memory expectedAmounts = IQuickSwapRouter(QUICK_ROUTER).getAmountsOut(amount, path);
+        uint256 minOutput = expectedAmounts[1] * (10000 - maxSlippage) / 10000;
+        
         uint256 maticBefore = address(this).balance;
         
         IQuickSwapRouter(QUICK_ROUTER).swapExactTokensForMATIC(
             amount,
-            0, // no minimum output (we accept any slippage for emergency exits)
+            minOutput, // 5% slippage protection
             path,
             address(this),
             block.timestamp + 300 // 5 minute deadline
@@ -465,6 +633,15 @@ contract PolySniper {
     }
     
     /**
+     * @dev Add suspicious function selectors to check for
+     */
+    function addSuspiciousSelectors(bytes4[] calldata selectors) external onlyOwner {
+        for (uint i = 0; i < selectors.length; i++) {
+            suspiciousSelectors.push(selectors[i]);
+        }
+    }
+    
+    /**
      * @dev Update trading parameters
      * @param _minLiquidityLockDays Minimum days liquidity should be locked
      * @param _minLiquidityPercentage Minimum percentage of liquidity locked
@@ -495,6 +672,49 @@ contract PolySniper {
     }
     
     /**
+     * @dev Update fee parameters
+     * @param _snipeFeePercentage Fee percentage for sniping (in basis points, 1% = 100)
+     * @param _profitFeePercentage Fee percentage on profits (in basis points, 1% = 100)
+     * @param _feeReceiver Address to receive fees
+     */
+    function updateFeeParameters(
+        uint256 _snipeFeePercentage,
+        uint256 _profitFeePercentage,
+        address _feeReceiver
+    ) external onlyOwner {
+        require(_snipeFeePercentage <= 1000, "Snipe fee too high"); // Max 10%
+        require(_profitFeePercentage <= 2000, "Profit fee too high"); // Max 20%
+        require(_feeReceiver != address(0), "Invalid fee receiver");
+        
+        snipeFeePercentage = _snipeFeePercentage;
+        profitFeePercentage = _profitFeePercentage;
+        feeReceiver = _feeReceiver;
+        
+        emit FeeUpdated("SnipeFee", _snipeFeePercentage);
+        emit FeeUpdated("ProfitFee", _profitFeePercentage);
+        emit FeeReceiverUpdated(_feeReceiver);
+    }
+    
+    /**
+     * @dev Update slippage parameters
+     * @param _maxSlippage Maximum slippage allowed (in basis points, 1% = 100)
+     */
+    function updateSlippageParameters(uint256 _maxSlippage) external onlyOwner {
+        require(_maxSlippage <= 3000, "Slippage too high"); // Max 30%
+        maxSlippage = _maxSlippage;
+        emit TradeParametersUpdated("Slippage", _maxSlippage);
+    }
+    
+    /**
+     * @dev Update MEV protection parameters
+     * @param _blockDeadline Number of blocks after which transaction is invalid
+     */
+    function updateMEVProtection(uint256 _blockDeadline) external onlyOwner {
+        blockDeadline = _blockDeadline;
+        emit TradeParametersUpdated("MEV Protection", _blockDeadline);
+    }
+    
+    /**
      * @dev Emergency withdrawal of funds
      * @param tokenAddress Address of token to withdraw (or zero address for MATIC)
      */
@@ -508,65 +728,11 @@ contract PolySniper {
     }
     
     /**
-     * @dev Get user's active trades
-     * @param userAddress Address of the user
-     * @return Trade[] Array of active trades
+     * @dev Transfer ownership of the contract
+     * @param newOwner Address of the new owner
      */
-    function getUserActiveTrades(address userAddress) external view returns (Trade[] memory) {
-        Trade[] memory allTrades = userTrades[userAddress];
-        
-        // Count active trades
-        uint256 activeCount = 0;
-        for (uint256 i = 0; i < allTrades.length; i++) {
-            if (allTrades[i].active) {
-                activeCount++;
-            }
-        }
-        
-        // Create array of active trades
-        Trade[] memory activeTrades = new Trade[](activeCount);
-        uint256 index = 0;
-        for (uint256 i = 0; i < allTrades.length; i++) {
-            if (allTrades[i].active) {
-                activeTrades[index] = allTrades[i];
-                index++;
-            }
-        }
-        
-        return activeTrades;
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Invalid new owner");
+        owner = newOwner;
     }
     
-    /**
-     * @dev Get latest new tokens on QuickSwap
-     * @param count Number of latest pairs to check
-     * @return address[] Array of new token addresses
-     */
-    function getLatestNewTokens(uint256 count) external view returns (address[] memory) {
-        IQuickSwapFactory factory = IQuickSwapFactory(QUICK_FACTORY);
-        uint256 pairCount = factory.allPairsLength();
-        
-        // Start from the most recent pairs
-        uint256 startIndex = pairCount > count ? pairCount - count : 0;
-        address[] memory newTokens = new address[](count);
-        
-        uint256 tokenIndex = 0;
-        for (uint256 i = startIndex; i < pairCount && tokenIndex < count; i++) {
-            address pairAddress = factory.allPairs(i);
-            IQuickSwapPair pair = IQuickSwapPair(pairAddress);
-            
-            address token0 = pair.token0();
-            address token1 = pair.token1();
-            
-            // Check which token in the pair is not WMATIC
-            address tokenAddress = token0 == WMATIC ? token1 : token0;
-            
-            // Only include if it's paired with WMATIC
-            if (token0 == WMATIC || token1 == WMATIC) {
-                newTokens[tokenIndex] = tokenAddress;
-                tokenIndex++;
-            }
-        }
-        
-        return newTokens;
-    }
-}
